@@ -15,10 +15,10 @@
  */
 package com.alibaba.druid.sql.ast;
 
+import java.util.List;
+
 import com.alibaba.druid.sql.SQLUtils;
 import com.alibaba.druid.sql.visitor.SQLASTVisitor;
-
-import java.util.List;
 
 public abstract class SQLStatementImpl extends SQLObjectImpl implements SQLStatement {
     protected String               dbType;
@@ -43,6 +43,10 @@ public abstract class SQLStatementImpl extends SQLObjectImpl implements SQLState
 
     public String toString() {
         return SQLUtils.toSQLString(this, dbType);
+    }
+
+    public String toLowerCaseString() {
+        return SQLUtils.toSQLString(this, dbType, SQLUtils.DEFAULT_LCASE_FORMAT_OPTION);
     }
 
     @Override

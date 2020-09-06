@@ -40,7 +40,6 @@ import java.util.Calendar;
 import com.alibaba.druid.pool.PreparedStatementPool.MethodType;
 import com.alibaba.druid.support.logging.Log;
 import com.alibaba.druid.support.logging.LogFactory;
-import com.alibaba.druid.util.JdbcConstants;
 import com.alibaba.druid.util.OracleUtils;
 
 /**
@@ -218,7 +217,7 @@ public class DruidPooledPreparedStatement extends DruidPooledStatement implement
     public ResultSet executeQuery() throws SQLException {
         checkOpen();
 
-        incrementExecuteCount();
+        incrementExecuteQueryCount();
         transactionRecord(sql);
 
         oracleSetRowPrefetch();
@@ -248,7 +247,7 @@ public class DruidPooledPreparedStatement extends DruidPooledStatement implement
     public int executeUpdate() throws SQLException {
         checkOpen();
 
-        incrementExecuteCount();
+        incrementExecuteUpdateCount();
         transactionRecord(sql);
 
         conn.beforeExecute();
@@ -491,7 +490,7 @@ public class DruidPooledPreparedStatement extends DruidPooledStatement implement
         incrementExecuteCount();
         transactionRecord(sql);
 
-        // oracleSetRowPrefetch();
+        oracleSetRowPrefetch();
 
         conn.beforeExecute();
         try {
@@ -558,7 +557,7 @@ public class DruidPooledPreparedStatement extends DruidPooledStatement implement
     public int[] executeBatch() throws SQLException {
         checkOpen();
 
-        incrementExecuteCount();
+        incrementExecuteBatchCount();
         transactionRecord(sql);
 
         conn.beforeExecute();

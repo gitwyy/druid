@@ -42,8 +42,9 @@ public class MySqlUtils {
     static Class<?>       class_5_MysqlXAConnection = null;
     static Constructor<?> constructor_5_MysqlXAConnection = null;
 
-    static Class<?>       class_5_ConnectionImpl = null;
-    static Method         method_5_getId         = null;
+    static Class<?>       class_ConnectionImpl = null;
+    static Method         method_getId = null;
+    static boolean        method_getId_error = false;
 
     static Class<?>       class_6_ConnectionImpl = null;
     static Method         method_6_getId         = null;
@@ -104,13 +105,26 @@ public class MySqlUtils {
                 e.printStackTrace();
             }
 
-        } else if (major == 6) {
+        } else if (major == 6 || major == 8) {
             if (method_6_getValue == null && !method_6_getValue_error) {
                 try {
                     class_6_connection = Class.forName("com.mysql.cj.api.jdbc.JdbcConnection");
-                    method_6_getPropertySet = class_6_connection.getMethod("getPropertySet");
-                    method_6_getBooleanReadableProperty = Class.forName("com.mysql.cj.api.conf.PropertySet").getMethod("getBooleanReadableProperty", String.class);
-                    method_6_getValue = Class.forName("com.mysql.cj.api.conf.ReadableProperty").getMethod("getValue");
+                } catch (Throwable t) {
+                }
+                
+                try {
+                    // maybe 8.0.11 or higher version, try again with com.mysql.cj.jdbc.JdbcConnection
+                    if (class_6_connection == null) {
+                        class_6_connection = Class.forName("com.mysql.cj.jdbc.JdbcConnection");
+                        method_6_getPropertySet = class_6_connection.getMethod("getPropertySet");
+                        method_6_getBooleanReadableProperty = Class.forName("com.mysql.cj.conf.PropertySet").getMethod("getBooleanReadableProperty", String.class);
+                        method_6_getValue = Class.forName("com.mysql.cj.conf.ReadableProperty").getMethod("getValue");
+                    }
+                    else { 
+                        method_6_getPropertySet = class_6_connection.getMethod("getPropertySet");
+                        method_6_getBooleanReadableProperty = Class.forName("com.mysql.cj.api.conf.PropertySet").getMethod("getBooleanReadableProperty", String.class);
+                        method_6_getValue = Class.forName("com.mysql.cj.api.conf.ReadableProperty").getMethod("getValue");
+                    }
                 } catch (Exception ex) {
                     ex.printStackTrace();
                     method_6_getValue_error = true;
@@ -119,14 +133,14 @@ public class MySqlUtils {
 
             try {
                 // pinGlobalTxToPhysicalConnection
-                boolean pinGlobTx = (Boolean) method_6_getValue.invoke(
+                Boolean pinGlobTx = (Boolean) method_6_getValue.invoke(
                         method_6_getBooleanReadableProperty.invoke(
                                 method_6_getPropertySet.invoke(physicalConn)
                                 , "pinGlobalTxToPhysicalConnection"
                         )
                 );
 
-                if (pinGlobTx) {
+                if (pinGlobTx != null && pinGlobTx) {
                     try {
                         if (method_6_getInstance == null && !method_6_getInstance_error) {
                             class_6_suspendableXAConnection = Class.forName("com.mysql.cj.jdbc.SuspendableXAConnection");
@@ -166,41 +180,7 @@ public class MySqlUtils {
     }
 
     public static String buildKillQuerySql(Connection connection, SQLException error) throws SQLException {
-        Long threadId = null;
-        try {
-            Class clazz = connection.getClass();
-
-            if (class_5_ConnectionImpl == null) {
-                if (clazz.getName().equals("com.mysql.jdbc.ConnectionImpl")) {
-                    class_5_ConnectionImpl = clazz;
-                }
-            }
-
-            if (class_5_ConnectionImpl == clazz) {
-                if (method_5_getId == null) {
-                    method_5_getId = class_5_ConnectionImpl.getMethod("getId");
-                }
-
-                threadId = (Long) method_5_getId.invoke(connection);
-            }
-
-            if (class_6_ConnectionImpl == null) {
-                if (clazz.getName().equals("com.mysql.cj.jdbc.ConnectionImpl")) {
-                    class_6_ConnectionImpl = clazz;
-                }
-            }
-
-            if (class_6_ConnectionImpl == clazz) {
-                if (method_6_getId == null) {
-                    method_6_getId = class_6_ConnectionImpl.getMethod("getId");
-                }
-
-                threadId = (Long) method_6_getId.invoke(connection);
-            }
-        } catch (Exception e) {
-            // skip
-        }
-
+        Long threadId = getId(connection);
         if (threadId == null) {
             return null;
         }
@@ -336,20 +316,66 @@ public class MySqlUtils {
         return SQLUtils.toSQLString(stmtList, JdbcConstants.MYSQL);
     }
 
-    private static Class   class_connectionImpl                     = null;
-    private static boolean class_connectionImpl_Error               = false;
-    private static Method  method_getIO                             = null;
-    private static boolean method_getIO_error                       = false;
-    private static Class   class_MysqlIO                            = null;
-    private static boolean class_MysqlIO_Error                      = false;
-    private static Method  method_getLastPacketReceivedTimeMs       = null;
-    private static boolean method_getLastPacketReceivedTimeMs_error = false;
+    private static transient Class   class_connectionImpl                     = null;
+    private static transient boolean class_connectionImpl_Error               = false;
+    private static transient Method  method_getIO                             = null;
+    private static transient boolean method_getIO_error                       = false;
+    private static transient Class   class_MysqlIO                            = null;
+    private static transient boolean class_MysqlIO_Error                      = false;
+    private static transient Method  method_getLastPacketReceivedTimeMs       = null;
+    private static transient boolean method_getLastPacketReceivedTimeMs_error = false;
+
+    private volatile static  boolean mysqlJdbcVersion6                        = false;
+    private static transient Class   classJdbc                                = null;
+    private static transient Method  getIdleFor                               = null;
+    private static transient boolean getIdleForError                          = false;
+
+    public static Long getId(Object conn) {
+        if (conn == null) {
+            return null;
+        }
+
+        Class<?> clazz = conn.getClass();
+        if (class_ConnectionImpl == null) {
+            if (clazz.getName().equals("com.mysql.jdbc.ConnectionImpl")) {
+                class_ConnectionImpl = clazz;
+            } else if (clazz.getName().equals("com.mysql.jdbc.Connection")) { // mysql 5.0.x
+                class_ConnectionImpl = clazz;
+            } else if (clazz.getName().equals("com.mysql.cj.jdbc.ConnectionImpl")) { // mysql 5.0.x
+                class_ConnectionImpl = clazz;
+            } else if (clazz.getSuperclass().getName().equals("com.mysql.jdbc.ConnectionImpl")) {
+                class_ConnectionImpl = clazz.getSuperclass();
+            }
+        }
+
+        if (class_ConnectionImpl == clazz || class_ConnectionImpl == clazz.getSuperclass()) {
+            try {
+                if (method_getId == null && !method_getId_error) {
+                    Method method = class_ConnectionImpl.getDeclaredMethod("getId");
+                    method.setAccessible(true);
+                    method_getId = method;
+                }
+
+                return (Long) method_getId.invoke(conn);
+            } catch (Throwable ex) {
+                method_getId_error = true;
+            }
+        }
+
+        return null;
+    }
 
     public static long getLastPacketReceivedTimeMs(Connection conn) throws SQLException {
         if (class_connectionImpl == null && !class_connectionImpl_Error) {
             try {
                 class_connectionImpl = Utils.loadClass("com.mysql.jdbc.MySQLConnection");
-            } catch (Throwable error){
+                if (class_connectionImpl == null) {
+                    class_connectionImpl = Utils.loadClass("com.mysql.cj.MysqlConnection");
+                    if (class_connectionImpl != null) {
+                        mysqlJdbcVersion6 = true;
+                    }
+                }
+            } catch (Throwable error) {
                 class_connectionImpl_Error = true;
             }
         }
@@ -358,59 +384,91 @@ public class MySqlUtils {
             return -1;
         }
 
-        if (method_getIO == null && !method_getIO_error) {
-            try {
-                method_getIO = class_connectionImpl.getMethod("getIO");
-            } catch (Throwable error){
-                method_getIO_error = true;
+        if(mysqlJdbcVersion6){
+            if (classJdbc == null) {
+                classJdbc = Utils.loadClass("com.mysql.cj.jdbc.JdbcConnection");
             }
-        }
 
-        if (method_getIO == null) {
-            return -1;
-        }
-
-        if (class_MysqlIO == null && !class_MysqlIO_Error) {
-            try {
-                class_MysqlIO = Utils.loadClass("com.mysql.jdbc.MysqlIO");
-            } catch (Throwable error){
-                class_MysqlIO_Error = true;
-            }
-        }
-
-        if (class_MysqlIO == null) {
-            return -1;
-        }
-
-        if (method_getLastPacketReceivedTimeMs == null && !method_getLastPacketReceivedTimeMs_error) {
-            try {
-                Method method = class_MysqlIO.getDeclaredMethod("getLastPacketReceivedTimeMs");
-                method.setAccessible(true);
-                method_getLastPacketReceivedTimeMs = method;
-            } catch (Throwable error){
-                method_getLastPacketReceivedTimeMs_error = true;
-            }
-        }
-
-        if (method_getLastPacketReceivedTimeMs == null) {
-            return -1;
-        }
-
-        try {
-            Object connImpl = conn.unwrap(class_connectionImpl);
-            if (connImpl == null) {
+            if (classJdbc == null) {
                 return -1;
             }
 
-            Object mysqlio = method_getIO.invoke(connImpl);
-            Long ms = (Long) method_getLastPacketReceivedTimeMs.invoke(mysqlio);
-            return ms.longValue();
-        } catch (IllegalArgumentException e) {
-            throw new SQLException("getLastPacketReceivedTimeMs error", e);
-        } catch (IllegalAccessException e) {
-            throw new SQLException("getLastPacketReceivedTimeMs error", e);
-        } catch (InvocationTargetException e) {
-            throw new SQLException("getLastPacketReceivedTimeMs error", e);
+            if (getIdleFor == null && !getIdleForError) {
+                try {
+                    getIdleFor = classJdbc.getMethod("getIdleFor");
+                    getIdleFor.setAccessible(true);
+                } catch (Throwable error) {
+                    getIdleForError = true;
+                }
+            }
+
+            if (getIdleFor == null) {
+                return -1;
+            }
+
+            try {
+                Object connImpl = conn.unwrap(class_connectionImpl);
+                if (connImpl == null) {
+                    return -1;
+                }
+
+                return System.currentTimeMillis()
+                        - ((Long)
+                            getIdleFor.invoke(connImpl))
+                        .longValue();
+            } catch (Exception e) {
+                throw new SQLException("getIdleFor error", e);
+            }
+        } else {
+            if (method_getIO == null && !method_getIO_error) {
+                try {
+                    method_getIO = class_connectionImpl.getMethod("getIO");
+                } catch (Throwable error) {
+                    method_getIO_error = true;
+                }
+            }
+
+            if (method_getIO == null) {
+                return -1;
+            }
+
+            if (class_MysqlIO == null && !class_MysqlIO_Error) {
+                try {
+                    class_MysqlIO = Utils.loadClass("com.mysql.jdbc.MysqlIO");
+                } catch (Throwable error) {
+                    class_MysqlIO_Error = true;
+                }
+            }
+
+            if (class_MysqlIO == null) {
+                return -1;
+            }
+
+            if (method_getLastPacketReceivedTimeMs == null && !method_getLastPacketReceivedTimeMs_error) {
+                try {
+                    Method method = class_MysqlIO.getDeclaredMethod("getLastPacketReceivedTimeMs");
+                    method.setAccessible(true);
+                    method_getLastPacketReceivedTimeMs = method;
+                } catch (Throwable error) {
+                    method_getLastPacketReceivedTimeMs_error = true;
+                }
+            }
+
+            if (method_getLastPacketReceivedTimeMs == null) {
+                return -1;
+            }
+
+            try {
+                Object connImpl = conn.unwrap(class_connectionImpl);
+                if (connImpl == null) {
+                    return -1;
+                }
+
+                Object mysqlio = method_getIO.invoke(connImpl);
+                return (Long) method_getLastPacketReceivedTimeMs.invoke(mysqlio);
+            } catch (Exception e) {
+                throw new SQLException("getLastPacketReceivedTimeMs error", e);
+            }
         }
     }
 

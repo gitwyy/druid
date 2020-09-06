@@ -20,7 +20,17 @@ import java.util.List;
 
 import com.alibaba.druid.sql.ast.SQLExpr;
 import com.alibaba.druid.sql.ast.SQLObject;
-import com.alibaba.druid.sql.ast.expr.*;
+import com.alibaba.druid.sql.ast.expr.SQLBetweenExpr;
+import com.alibaba.druid.sql.ast.expr.SQLBinaryOpExpr;
+import com.alibaba.druid.sql.ast.expr.SQLBooleanExpr;
+import com.alibaba.druid.sql.ast.expr.SQLCharExpr;
+import com.alibaba.druid.sql.ast.expr.SQLDateExpr;
+import com.alibaba.druid.sql.ast.expr.SQLHexExpr;
+import com.alibaba.druid.sql.ast.expr.SQLListExpr;
+import com.alibaba.druid.sql.ast.expr.SQLLiteralExpr;
+import com.alibaba.druid.sql.ast.expr.SQLNumericLiteralExpr;
+import com.alibaba.druid.sql.ast.expr.SQLTimestampExpr;
+import com.alibaba.druid.sql.ast.expr.SQLVariantRefExpr;
 import com.alibaba.druid.sql.dialect.db2.visitor.DB2ExportParameterVisitor;
 import com.alibaba.druid.sql.dialect.mysql.visitor.MySqlExportParameterVisitor;
 import com.alibaba.druid.sql.dialect.oracle.visitor.OracleExportParameterVisitor;
@@ -37,12 +47,22 @@ public final class ExportParameterVisitorUtils {
 
     public static ExportParameterVisitor createExportParameterVisitor(final  Appendable out ,final String dbType) {
         
-        if (JdbcUtils.MYSQL.equals(dbType)) {
+        if (JdbcUtils.isMysqlDbType(dbType)) {
             return new MySqlExportParameterVisitor(out);
         }
-        if (JdbcUtils.ORACLE.equals(dbType) || JdbcUtils.ALI_ORACLE.equals(dbType)) {
+
+        if (JdbcUtils.isOracleDbType(dbType)) {
             return new OracleExportParameterVisitor(out);
         }
+
+        if (JdbcUtils.isPgsqlDbType(dbType)) {
+            return new PGExportParameterVisitor(out);
+        }
+
+        if (JdbcUtils.isSqlserverDbType(dbType)) {
+            return new MSSQLServerExportParameterVisitor(out);
+        }
+
         if (JdbcUtils.DB2.equals(dbType)) {
             return new DB2ExportParameterVisitor(out);
         }
@@ -56,7 +76,8 @@ public final class ExportParameterVisitorUtils {
         }
 
         if (JdbcUtils.POSTGRESQL.equals(dbType)
-                || JdbcUtils.ENTERPRISEDB.equals(dbType)) {
+                || JdbcUtils.ENTERPRISEDB.equals(dbType)
+                || JdbcUtils.POLARDB.equals(dbType)) {
             return new PGExportParameterVisitor(out);
         }
 

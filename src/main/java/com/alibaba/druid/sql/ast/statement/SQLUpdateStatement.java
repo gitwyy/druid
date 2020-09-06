@@ -19,7 +19,13 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.alibaba.druid.sql.SQLUtils;
-import com.alibaba.druid.sql.ast.*;
+import com.alibaba.druid.sql.ast.SQLExpr;
+import com.alibaba.druid.sql.ast.SQLHint;
+import com.alibaba.druid.sql.ast.SQLName;
+import com.alibaba.druid.sql.ast.SQLObject;
+import com.alibaba.druid.sql.ast.SQLOrderBy;
+import com.alibaba.druid.sql.ast.SQLReplaceable;
+import com.alibaba.druid.sql.ast.SQLStatementImpl;
 import com.alibaba.druid.sql.ast.expr.SQLBinaryOpExpr;
 import com.alibaba.druid.sql.ast.expr.SQLBinaryOpExprGroup;
 import com.alibaba.druid.sql.ast.expr.SQLBinaryOperator;
@@ -311,5 +317,14 @@ public class SQLUpdateStatement extends SQLStatementImpl implements SQLReplaceab
         result = 31 * result + (orderBy != null ? orderBy.hashCode() : 0);
         result = 31 * result + (hints != null ? hints.hashCode() : 0);
         return result;
+    }
+
+    public boolean addWhere(SQLExpr where) {
+        if (where == null) {
+            return false;
+        }
+
+        this.addCondition(where);
+        return true;
     }
 }

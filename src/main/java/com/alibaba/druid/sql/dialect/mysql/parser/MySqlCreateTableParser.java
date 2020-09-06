@@ -29,7 +29,14 @@ import com.alibaba.druid.sql.ast.SQLSubPartitionByHash;
 import com.alibaba.druid.sql.ast.expr.SQLIdentifierExpr;
 import com.alibaba.druid.sql.ast.expr.SQLIntegerExpr;
 import com.alibaba.druid.sql.ast.expr.SQLNumberExpr;
-import com.alibaba.druid.sql.ast.statement.*;
+import com.alibaba.druid.sql.ast.statement.SQLAssignItem;
+import com.alibaba.druid.sql.ast.statement.SQLCheck;
+import com.alibaba.druid.sql.ast.statement.SQLColumnDefinition;
+import com.alibaba.druid.sql.ast.statement.SQLCreateTableStatement;
+import com.alibaba.druid.sql.ast.statement.SQLForeignKeyConstraint;
+import com.alibaba.druid.sql.ast.statement.SQLSelect;
+import com.alibaba.druid.sql.ast.statement.SQLTableConstraint;
+import com.alibaba.druid.sql.ast.statement.SQLTableSource;
 import com.alibaba.druid.sql.dialect.mysql.ast.MySqlKey;
 import com.alibaba.druid.sql.dialect.mysql.ast.MySqlPrimaryKey;
 import com.alibaba.druid.sql.dialect.mysql.ast.MySqlUnique;
@@ -41,7 +48,11 @@ import com.alibaba.druid.sql.dialect.mysql.ast.statement.MySqlPartitionByKey;
 import com.alibaba.druid.sql.dialect.mysql.ast.statement.MySqlSubPartitionByKey;
 import com.alibaba.druid.sql.dialect.mysql.ast.statement.MySqlSubPartitionByList;
 import com.alibaba.druid.sql.dialect.mysql.ast.statement.MySqlTableIndex;
-import com.alibaba.druid.sql.parser.*;
+import com.alibaba.druid.sql.parser.Lexer;
+import com.alibaba.druid.sql.parser.ParserException;
+import com.alibaba.druid.sql.parser.SQLCreateTableParser;
+import com.alibaba.druid.sql.parser.SQLExprParser;
+import com.alibaba.druid.sql.parser.Token;
 import com.alibaba.druid.util.FnvHash;
 
 public class MySqlCreateTableParser extends SQLCreateTableParser {
@@ -106,7 +117,7 @@ public class MySqlCreateTableParser extends SQLCreateTableParser {
                 stmt.setSelect(query);
             } else {
                 for (;;) {
-                    if (lexer.identifierEquals(FnvHash.Constants.FULLTEXT)) {
+                    if (lexer.token() == Token.FULLTEXT) {
                         Lexer.SavePoint mark = lexer.mark();
                         lexer.nextToken();
                         if (lexer.token() == Token.KEY) {
@@ -119,8 +130,51 @@ public class MySqlCreateTableParser extends SQLCreateTableParser {
                                 lexer.nextToken();
                                 continue;
                             }
+                        } else if (lexer.token() == Token.INDEX) {
+                            lexer.nextToken();
+                            MySqlTableIndex idx = new MySqlTableIndex();
+                            idx.setIndexType("FULLTEXT");
+                            idx.setName(this.exprParser.name());
+
+                            accept(Token.LPAREN);
+                            for (; ; ) {
+                                idx.addColumn(this.exprParser.parseSelectOrderByItem());
+                                if (!(lexer.token() == (Token.COMMA))) {
+                                    break;
+                                } else {
+                                    lexer.nextToken();
+                                }
+                            }
+                            stmt.getTableElementList().add(idx);
+                            accept(Token.RPAREN);
+                            if (lexer.token() == Token.RPAREN) {
+                                break;
+                            } else if (lexer.token() == Token.COMMA) {
+                                lexer.nextToken();
+                                continue;
+                            }
                         } else {
-                            lexer.reset(mark);
+                            MySqlTableIndex idx = new MySqlTableIndex();
+                            idx.setIndexType("FULLTEXT");
+                            idx.setName(this.exprParser.name());
+
+                            accept(Token.LPAREN);
+                            for (; ; ) {
+                                idx.addColumn(this.exprParser.parseSelectOrderByItem());
+                                if (!(lexer.token() == (Token.COMMA))) {
+                                    break;
+                                } else {
+                                    lexer.nextToken();
+                                }
+                            }
+                            stmt.getTableElementList().add(idx);
+                            accept(Token.RPAREN);
+                            if (lexer.token() == Token.RPAREN) {
+                                break;
+                            } else if (lexer.token() == Token.COMMA) {
+                                lexer.nextToken();
+                                continue;
+                            }
                         }
                     } else if (lexer.identifierEquals(FnvHash.Constants.SPATIAL)) {
                         Lexer.SavePoint mark = lexer.mark();
